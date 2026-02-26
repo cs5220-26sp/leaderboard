@@ -11,6 +11,7 @@ DATABASE = os.environ.get("DATABASE_PATH", "leaderboard.db")
 
 HEADER = "===== CS5220 HW3 LEADERBOARD SUBMISSION ====="
 FOOTER = "===== END CS5220 HW3 LEADERBOARD SUBMISSION ====="
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "changeme")
 
 
 def get_db():
@@ -53,7 +54,7 @@ def parse_output(raw_output):
       RS1e5  - serial runtime (seconds) from SERIAL section
       PE1    - parallel efficiency from 64 to 128 tasks (2M particles)
       PE2    - parallel efficiency from 128 to 256 tasks (2M particles)
-      overall - PE1 * 0.4 + PE2 * 0.4 + (1/RS1e5) * 0.2
+      parallel_performance - PE1 * 0.5 + PE2 * 0.5
     """
     metrics = {}
 
@@ -79,10 +80,9 @@ def parse_output(raw_output):
             if t256 > 0:
                 metrics["PE2"] = t128 / (2 * t256)
 
-    # Compute overall score
-    if "PE1" in metrics and "PE2" in metrics and "RS1e5" in metrics and metrics["RS1e5"] > 0:
-        rs = 1.0 / metrics["RS1e5"]
-        metrics["overall"] = metrics["PE1"] * 0.4 + metrics["PE2"] * 0.4 + rs * 0.2
+    # Compute parallel performance
+    if "PE1" in metrics and "PE2" in metrics:
+        metrics["parallel_performance"] = metrics["PE1"] * 0.5 + metrics["PE2"] * 0.5
 
     return metrics
 
@@ -151,8 +151,35 @@ def leaderboard_data():
         }
         entries.append(entry)
 
-    entries.sort(key=lambda e: e["metrics"].get("overall", 0), reverse=True)
+    entries.sort(key=lambda e: e["metrics"].get("parallel_performance", 0), reverse=True)
     return jsonify(entries)
+
+
+def require_admin():
+    key = request.headers.get("X-Admin-Key", "")
+    if key != ADMIN_KEY:
+        return False
+    return True
+
+
+@app.route("/api/admin/clear", methods=["POST"])
+def clear_all():
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    db.execute("DELETE FROM submissions")
+    db.commit()
+    return jsonify({"status": "ok", "message": "All submissions cleared"})
+
+
+@app.route("/api/admin/delete/<name>", methods=["POST"])
+def delete_entry(name):
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    db.execute("DELETE FROM submissions WHERE name = ?", (name,))
+    db.commit()
+    return jsonify({"status": "ok", "message": f"Deleted {name}"})
 
 
 init_db()
