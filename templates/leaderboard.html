@@ -140,7 +140,7 @@
 <body>
     <h1>CS5220 HW3 Leaderboard</h1>
     <p class="subtitle">MPI Particle Simulation</p>
-    <p class="formula">Overall = PE1 &times; 0.4 + PE2 &times; 0.4 + (1/RS1e5) &times; 0.2</p>
+    <p class="formula">Parallel Performance = PE1 &times; 0.5 + PE2 &times; 0.5</p>
 
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('table')">Leaderboard</button>
@@ -157,7 +157,7 @@
                     <th>RS1e5 (s)</th>
                     <th>PE1</th>
                     <th>PE2</th>
-                    <th>Overall</th>
+                    <th>Par. Perf.</th>
                 </tr>
             </thead>
             <tbody id="leaderboard-body">
@@ -232,7 +232,7 @@
                     <td>${fmt(m.RS1e5, 4)}</td>
                     <td>${fmt(m.PE1, 4)}</td>
                     <td>${fmt(m.PE2, 4)}</td>
-                    <td class="overall">${fmt(m.overall, 4)}</td>
+                    <td class="overall">${fmt(m.parallel_performance, 4)}</td>
                 </tr>`;
             }).join("");
         }
@@ -242,7 +242,7 @@
                 { key: "RS1e5", label: "RS1e5 (s)", color: "#e74c3c", decimals: 4 },
                 { key: "PE1",   label: "PE1 (64\u2192128)", color: "#3498db", decimals: 4 },
                 { key: "PE2",   label: "PE2 (128\u2192256)", color: "#2ecc71", decimals: 4 },
-                { key: "overall", label: "Overall", color: "#b31b1b", decimals: 4 }
+                { key: "parallel_performance", label: "Parallel Performance", color: "#b31b1b", decimals: 4 }
             ];
 
             const cardsEl = document.getElementById("stats-cards");
