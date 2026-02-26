@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CS5220 HW3 Leaderboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            max-width: 960px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            text-align: center;
+            color: #b31b1b;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 10px 14px;
+            text-align: right;
+            border-bottom: 1px solid #eee;
+        }
+        th {
+            background: #b31b1b;
+            color: white;
+            font-weight: 600;
+        }
+        th.name, td.name { text-align: left; }
+        th.rank, td.rank { text-align: center; width: 50px; }
+        tr:hover { background: #f9f9f9; }
+        .name { font-family: monospace; font-weight: 600; }
+        .overall { font-weight: 700; }
+        .top1 { background: #fff8e1; }
+        .top2 { background: #f5f5f5; }
+        .top3 { background: #fff3e0; }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        .refresh-note {
+            text-align: center;
+            color: #aaa;
+            font-size: 0.85em;
+            margin-top: 15px;
+        }
+        .formula {
+            text-align: center;
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>CS5220 HW3 Leaderboard</h1>
+    <p class="subtitle">MPI Particle Simulation</p>
+    <p class="formula">Overall = PE1 &times; 0.4 + PE2 &times; 0.4 + (1/RS1e5) &times; 0.2</p>
+
+    <table>
+        <thead>
+            <tr>
+                <th class="rank">#</th>
+                <th class="name">Name</th>
+                <th>RS1e5 (s)</th>
+                <th>PE1</th>
+                <th>PE2</th>
+                <th>Overall</th>
+            </tr>
+        </thead>
+        <tbody id="leaderboard-body">
+            <tr><td colspan="6" class="no-data">Loading...</td></tr>
+        </tbody>
+    </table>
+
+    <p class="refresh-note">Auto-refreshes every 30 seconds</p>
+
+    <script>
+        function fmt(val, decimals) {
+            if (val === undefined || val === null) return "--";
+            return Number(val).toFixed(decimals);
+        }
+
+        function rowClass(rank) {
+            if (rank === 1) return "top1";
+            if (rank === 2) return "top2";
+            if (rank === 3) return "top3";
+            return "";
+        }
+
+        async function fetchLeaderboard() {
+            try {
+                const resp = await fetch("/api/leaderboard");
+                const data = await resp.json();
+                const tbody = document.getElementById("leaderboard-body");
+
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="no-data">No submissions yet</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.map((entry, i) => {
+                    const m = entry.metrics;
+                    const rank = i + 1;
+                    return `
+                    <tr class="${rowClass(rank)}">
+                        <td class="rank">${rank}</td>
+                        <td class="name">${entry.name}</td>
+                        <td>${fmt(m.RS1e5, 4)}</td>
+                        <td>${fmt(m.PE1, 4)}</td>
+                        <td>${fmt(m.PE2, 4)}</td>
+                        <td class="overall">${fmt(m.overall, 4)}</td>
+                    </tr>`;
+                }).join("");
+            } catch (err) {
+                console.error("Failed to fetch leaderboard:", err);
+            }
+        }
+
+        fetchLeaderboard();
+        setInterval(fetchLeaderboard, 30000);
+    </script>
+</body>
+</html>
