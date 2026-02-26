@@ -4,10 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CS5220 HW3 Leaderboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
     <style>
+        * { box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            max-width: 960px;
+            max-width: 1060px;
             margin: 40px auto;
             padding: 0 20px;
             background: #f5f5f5;
@@ -16,17 +18,58 @@
         h1 {
             text-align: center;
             color: #b31b1b;
+            margin-bottom: 4px;
         }
         .subtitle {
             text-align: center;
             color: #666;
-            margin-bottom: 30px;
+            margin-bottom: 6px;
         }
+        .formula {
+            text-align: center;
+            color: #888;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+            font-family: monospace;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 12px 0;
+            text-align: center;
+            background: #ddd;
+            border: none;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            color: #555;
+            transition: background 0.15s, color 0.15s;
+        }
+        .tab-btn:first-child { border-radius: 8px 0 0 0; }
+        .tab-btn:last-child  { border-radius: 0 8px 0 0; }
+        .tab-btn.active {
+            background: white;
+            color: #b31b1b;
+        }
+        .tab-panel {
+            display: none;
+            background: white;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border-radius: 0 0 8px 8px;
+        }
+        .tab-panel.active { display: block; }
+
+        /* Table */
         table {
             width: 100%;
             border-collapse: collapse;
-            background: white;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
         th, td {
             padding: 10px 14px;
@@ -51,18 +94,46 @@
             padding: 40px;
             color: #888;
         }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .stat-card {
+            background: #fafafa;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-card h3 {
+            margin: 0 0 10px 0;
+            color: #b31b1b;
+            font-size: 0.95em;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.88em;
+            padding: 3px 0;
+            color: #555;
+        }
+        .stat-row span:last-child {
+            font-weight: 600;
+            color: #333;
+        }
+        .histogram-container {
+            margin-bottom: 24px;
+        }
+
         .refresh-note {
             text-align: center;
             color: #aaa;
             font-size: 0.85em;
             margin-top: 15px;
-        }
-        .formula {
-            text-align: center;
-            color: #888;
-            font-size: 0.9em;
-            margin-bottom: 20px;
-            font-family: monospace;
         }
     </style>
 </head>
@@ -71,25 +142,49 @@
     <p class="subtitle">MPI Particle Simulation</p>
     <p class="formula">Overall = PE1 &times; 0.4 + PE2 &times; 0.4 + (1/RS1e5) &times; 0.2</p>
 
-    <table>
-        <thead>
-            <tr>
-                <th class="rank">#</th>
-                <th class="name">Name</th>
-                <th>RS1e5 (s)</th>
-                <th>PE1</th>
-                <th>PE2</th>
-                <th>Overall</th>
-            </tr>
-        </thead>
-        <tbody id="leaderboard-body">
-            <tr><td colspan="6" class="no-data">Loading...</td></tr>
-        </tbody>
-    </table>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('table')">Leaderboard</button>
+        <button class="tab-btn" onclick="switchTab('stats')">Statistics</button>
+    </div>
+
+    <!-- Table Tab -->
+    <div id="tab-table" class="tab-panel active">
+        <table>
+            <thead>
+                <tr>
+                    <th class="rank">#</th>
+                    <th class="name">Name</th>
+                    <th>RS1e5 (s)</th>
+                    <th>PE1</th>
+                    <th>PE2</th>
+                    <th>Overall</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard-body">
+                <tr><td colspan="6" class="no-data">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Stats Tab -->
+    <div id="tab-stats" class="tab-panel">
+        <div class="stats-grid" id="stats-cards"></div>
+        <div id="histograms"></div>
+    </div>
 
     <p class="refresh-note">Auto-refreshes every 30 seconds</p>
 
     <script>
+        let leaderboardData = [];
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add('active');
+            if (tab === 'stats') renderStats();
+        }
+
         function fmt(val, decimals) {
             if (val === undefined || val === null) return "--";
             return Number(val).toFixed(decimals);
@@ -102,30 +197,122 @@
             return "";
         }
 
+        function computeStats(values) {
+            if (values.length === 0) return null;
+            const sorted = [...values].sort((a, b) => a - b);
+            const n = sorted.length;
+            const sum = sorted.reduce((a, b) => a + b, 0);
+            const mean = sum / n;
+            const median = n % 2 === 1 ? sorted[Math.floor(n / 2)] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+            const variance = sorted.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+            const std = Math.sqrt(variance);
+            return {
+                min: sorted[0],
+                max: sorted[n - 1],
+                mean: mean,
+                median: median,
+                std: std,
+                count: n
+            };
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById("leaderboard-body");
+            if (leaderboardData.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">No submissions yet</td></tr>';
+                return;
+            }
+            tbody.innerHTML = leaderboardData.map((entry, i) => {
+                const m = entry.metrics;
+                const rank = i + 1;
+                return `
+                <tr class="${rowClass(rank)}">
+                    <td class="rank">${rank}</td>
+                    <td class="name">${entry.name}</td>
+                    <td>${fmt(m.RS1e5, 4)}</td>
+                    <td>${fmt(m.PE1, 4)}</td>
+                    <td>${fmt(m.PE2, 4)}</td>
+                    <td class="overall">${fmt(m.overall, 4)}</td>
+                </tr>`;
+            }).join("");
+        }
+
+        function renderStats() {
+            const metrics = [
+                { key: "RS1e5", label: "RS1e5 (s)", color: "#e74c3c", decimals: 4 },
+                { key: "PE1",   label: "PE1 (64\u2192128)", color: "#3498db", decimals: 4 },
+                { key: "PE2",   label: "PE2 (128\u2192256)", color: "#2ecc71", decimals: 4 },
+                { key: "overall", label: "Overall", color: "#b31b1b", decimals: 4 }
+            ];
+
+            const cardsEl = document.getElementById("stats-cards");
+            const histEl = document.getElementById("histograms");
+
+            if (leaderboardData.length === 0) {
+                cardsEl.innerHTML = '<div class="no-data">No submissions yet</div>';
+                histEl.innerHTML = '';
+                return;
+            }
+
+            // Build summary cards
+            let cardsHTML = '';
+            metrics.forEach(m => {
+                const values = leaderboardData
+                    .map(e => e.metrics[m.key])
+                    .filter(v => v !== undefined && v !== null);
+                const s = computeStats(values);
+                if (!s) return;
+                cardsHTML += `
+                <div class="stat-card">
+                    <h3>${m.label}</h3>
+                    <div class="stat-row"><span>Count</span><span>${s.count}</span></div>
+                    <div class="stat-row"><span>Min</span><span>${fmt(s.min, m.decimals)}</span></div>
+                    <div class="stat-row"><span>Max</span><span>${fmt(s.max, m.decimals)}</span></div>
+                    <div class="stat-row"><span>Mean</span><span>${fmt(s.mean, m.decimals)}</span></div>
+                    <div class="stat-row"><span>Median</span><span>${fmt(s.median, m.decimals)}</span></div>
+                    <div class="stat-row"><span>Std Dev</span><span>${fmt(s.std, m.decimals)}</span></div>
+                </div>`;
+            });
+            cardsEl.innerHTML = cardsHTML;
+
+            // Build histograms
+            histEl.innerHTML = '';
+            metrics.forEach(m => {
+                const values = leaderboardData
+                    .map(e => e.metrics[m.key])
+                    .filter(v => v !== undefined && v !== null);
+                if (values.length === 0) return;
+
+                const div = document.createElement('div');
+                div.className = 'histogram-container';
+                histEl.appendChild(div);
+
+                Plotly.newPlot(div, [{
+                    x: values,
+                    type: 'histogram',
+                    marker: { color: m.color, line: { color: '#fff', width: 1 } },
+                    opacity: 0.85
+                }], {
+                    title: { text: m.label, font: { size: 15 } },
+                    xaxis: { title: m.label },
+                    yaxis: { title: 'Count' },
+                    bargap: 0.05,
+                    margin: { t: 45, b: 50, l: 50, r: 20 },
+                    height: 300,
+                    paper_bgcolor: 'transparent',
+                    plot_bgcolor: '#fafafa'
+                }, { responsive: true, displayModeBar: false });
+            });
+        }
+
         async function fetchLeaderboard() {
             try {
                 const resp = await fetch("/api/leaderboard");
-                const data = await resp.json();
-                const tbody = document.getElementById("leaderboard-body");
-
-                if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="6" class="no-data">No submissions yet</td></tr>';
-                    return;
+                leaderboardData = await resp.json();
+                renderTable();
+                if (document.getElementById('tab-stats').classList.contains('active')) {
+                    renderStats();
                 }
-
-                tbody.innerHTML = data.map((entry, i) => {
-                    const m = entry.metrics;
-                    const rank = i + 1;
-                    return `
-                    <tr class="${rowClass(rank)}">
-                        <td class="rank">${rank}</td>
-                        <td class="name">${entry.name}</td>
-                        <td>${fmt(m.RS1e5, 4)}</td>
-                        <td>${fmt(m.PE1, 4)}</td>
-                        <td>${fmt(m.PE2, 4)}</td>
-                        <td class="overall">${fmt(m.overall, 4)}</td>
-                    </tr>`;
-                }).join("");
             } catch (err) {
                 console.error("Failed to fetch leaderboard:", err);
             }
