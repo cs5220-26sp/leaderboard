@@ -1,4 +1,5 @@
 import json
+import os
 import sqlite3
 import re
 from datetime import datetime, timezone
@@ -6,7 +7,7 @@ from datetime import datetime, timezone
 from flask import Flask, request, jsonify, render_template, g
 
 app = Flask(__name__)
-DATABASE = "leaderboard.db"
+DATABASE = os.environ.get("DATABASE_PATH", "leaderboard.db")
 
 HEADER = "===== CS5220 HW3 LEADERBOARD SUBMISSION ====="
 FOOTER = "===== END CS5220 HW3 LEADERBOARD SUBMISSION ====="
@@ -154,6 +155,7 @@ def leaderboard_data():
     return jsonify(entries)
 
 
+init_db()
+
 if __name__ == "__main__":
-    init_db()
-    app.run(host="0.0.0.0", port=5220, debug=True)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5220)), debug=True)

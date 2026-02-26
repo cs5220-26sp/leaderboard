@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: cs5220-leaderboard
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: DATABASE_PATH
+        value: /data/leaderboard.db
+    disk:
+      name: leaderboard-data
+      mountPath: /data
+      sizeGB: 1
