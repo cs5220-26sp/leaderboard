@@ -254,14 +254,12 @@
                 <tr>
                     <th class="rank">#</th>
                     <th class="name">Name</th>
-                    <th>TSC Min</th>
-                    <th>TSC Mean</th>
-                    <th>Runtime</th>
+                    <th>Runtime (cycles)</th>
                     <th class="actions" id="th-actions" style="display:none;"></th>
                 </tr>
             </thead>
             <tbody id="leaderboard-body">
-                <tr><td colspan="5" class="no-data">Loading...</td></tr>
+                <tr><td colspan="3" class="no-data">Loading...</td></tr>
             </tbody>
         </table>
     </div>
@@ -389,7 +387,7 @@
 
         function renderTable() {
             const tbody = document.getElementById("leaderboard-body");
-            const colSpan = adminKey ? 6 : 5;
+            const colSpan = adminKey ? 4 : 3;
             if (leaderboardData.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="${colSpan}" class="no-data">No submissions yet</td></tr>`;
                 return;
@@ -404,8 +402,6 @@
                 <tr class="${rowClass(rank)}">
                     <td class="rank">${rank}</td>
                     <td class="name">${entry.name}</td>
-                    <td>${fmtInt(m.tsc_min)}</td>
-                    <td>${fmtInt(m.tsc_mean)}</td>
                     <td class="overall">${fmtInt(m.runtime)}</td>
                     ${deleteCell}
                 </tr>`;
@@ -414,8 +410,6 @@
 
         function renderStats() {
             const metrics = [
-                { key: "tsc_min",  label: "TSC Min (cycles)",  color: "#3498db", decimals: 0 },
-                { key: "tsc_mean", label: "TSC Mean (cycles)", color: "#2ecc71", decimals: 1 },
                 { key: "runtime",  label: "Runtime (cycles)",  color: "#b31b1b", decimals: 0 }
             ];
 
