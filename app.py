@@ -9,8 +9,10 @@ from flask import Flask, request, jsonify, render_template, g
 app = Flask(__name__)
 DATABASE = os.environ.get("DATABASE_PATH", "leaderboard.db")
 
-HEADER = "===== CS5220 HW3 LEADERBOARD SUBMISSION ====="
-FOOTER = "===== END CS5220 HW3 LEADERBOARD SUBMISSION ====="
+HW3_HEADER = "===== CS5220 HW3 LEADERBOARD SUBMISSION ====="
+HW3_FOOTER = "===== END CS5220 HW3 LEADERBOARD SUBMISSION ====="
+HW4_HEADER = "===== CS5220 HW4 LEADERBOARD SUBMISSION ====="
+HW4_FOOTER = "===== END CS5220 HW4 LEADERBOARD SUBMISSION ====="
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "changeme")
 
 
@@ -32,6 +34,14 @@ def init_db():
     db = sqlite3.connect(DATABASE)
     db.execute("""
         CREATE TABLE IF NOT EXISTS submissions (
+            name TEXT PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            raw_output TEXT NOT NULL,
+            metrics TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS hw4_submissions (
             name TEXT PRIMARY KEY,
             timestamp TEXT NOT NULL,
             raw_output TEXT NOT NULL,
@@ -87,11 +97,11 @@ def parse_output(raw_output):
     return metrics
 
 
-def validate_output(raw_output):
+def validate_output(raw_output, header, footer):
     """Validate that the output has the expected structure."""
-    if HEADER not in raw_output:
+    if header not in raw_output:
         return False, "Missing header marker"
-    if FOOTER not in raw_output:
+    if footer not in raw_output:
         return False, "Missing footer marker"
 
     name_match = re.search(r"LEADERBOARD_NAME:\s*(\S+)", raw_output)
@@ -99,6 +109,33 @@ def validate_output(raw_output):
         return False, "Missing LEADERBOARD_NAME"
 
     return True, name_match.group(1)
+
+
+def parse_hw4_output(raw_output):
+    """Parse raw job-leaderboard output for HW4 into structured metrics.
+
+    Extracts TSC timer statistics (cycles per PE) from the PERF section:
+      tsc_min  - minimum cycles across all PEs
+      tsc_max  - maximum cycles across all PEs (used as 'runtime')
+      tsc_mean - mean cycles across all PEs
+    """
+    metrics = {}
+
+    perf_match = re.search(r"--- PERF ---\n(.*?)--- END PERF ---", raw_output, re.DOTALL)
+    if perf_match:
+        section = perf_match.group(1)
+        min_match = re.search(r"Min:\s+([\d]+)", section)
+        max_match = re.search(r"Max:\s+([\d]+)", section)
+        mean_match = re.search(r"Mean:\s+([\d.]+)", section)
+        if min_match:
+            metrics["tsc_min"] = int(min_match.group(1))
+        if max_match:
+            metrics["tsc_max"] = int(max_match.group(1))
+            metrics["runtime"] = metrics["tsc_max"]
+        if mean_match:
+            metrics["tsc_mean"] = float(mean_match.group(1))
+
+    return metrics
 
 
 @app.route("/")
@@ -110,7 +147,7 @@ def index():
 def submit():
     raw_output = request.get_data(as_text=True)
 
-    valid, result = validate_output(raw_output)
+    valid, result = validate_output(raw_output, HW3_HEADER, HW3_FOOTER)
     if not valid:
         return jsonify({"error": result}), 400
 
@@ -178,6 +215,80 @@ def delete_entry(name):
         return jsonify({"error": "Unauthorized"}), 401
     db = get_db()
     db.execute("DELETE FROM submissions WHERE name = ?", (name,))
+    db.commit()
+    return jsonify({"status": "ok", "message": f"Deleted {name}"})
+
+
+@app.route("/hw4")
+def hw4_index():
+    return render_template("leaderboard_hw4.html")
+
+
+@app.route("/api/hw4/submit", methods=["POST"])
+def hw4_submit():
+    raw_output = request.get_data(as_text=True)
+
+    valid, result = validate_output(raw_output, HW4_HEADER, HW4_FOOTER)
+    if not valid:
+        return jsonify({"error": result}), 400
+
+    name = result
+    timestamp_match = re.search(r"TIMESTAMP:\s*(\S+)", raw_output)
+    timestamp = timestamp_match.group(1) if timestamp_match else datetime.now(timezone.utc).isoformat()
+
+    metrics = parse_hw4_output(raw_output)
+
+    db = get_db()
+    db.execute(
+        """INSERT INTO hw4_submissions (name, timestamp, raw_output, metrics)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(name) DO UPDATE SET
+               timestamp = excluded.timestamp,
+               raw_output = excluded.raw_output,
+               metrics = excluded.metrics""",
+        (name, timestamp, raw_output, json.dumps(metrics)),
+    )
+    db.commit()
+
+    return jsonify({"status": "ok", "name": name, "timestamp": timestamp})
+
+
+@app.route("/api/hw4/leaderboard")
+def hw4_leaderboard_data():
+    db = get_db()
+    rows = db.execute(
+        "SELECT name, timestamp, metrics FROM hw4_submissions ORDER BY timestamp DESC"
+    ).fetchall()
+
+    entries = []
+    for row in rows:
+        entry = {
+            "name": row["name"],
+            "timestamp": row["timestamp"],
+            "metrics": json.loads(row["metrics"]),
+        }
+        entries.append(entry)
+
+    entries.sort(key=lambda e: e["metrics"].get("runtime", float("inf")))
+    return jsonify(entries)
+
+
+@app.route("/api/hw4/admin/clear", methods=["POST"])
+def hw4_clear_all():
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    db.execute("DELETE FROM hw4_submissions")
+    db.commit()
+    return jsonify({"status": "ok", "message": "All HW4 submissions cleared"})
+
+
+@app.route("/api/hw4/admin/delete/<name>", methods=["POST"])
+def hw4_delete_entry(name):
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    db.execute("DELETE FROM hw4_submissions WHERE name = ?", (name,))
     db.commit()
     return jsonify({"status": "ok", "message": f"Deleted {name}"})
 

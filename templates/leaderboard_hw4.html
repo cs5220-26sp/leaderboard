@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CS5220 HW3 Leaderboard</title>
+    <title>CS5220 HW4 Leaderboard</title>
     <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
     <style>
         * { box-sizing: border-box; }
@@ -32,6 +32,26 @@
             margin-bottom: 20px;
             font-family: monospace;
         }
+
+        /* Nav */
+        .nav {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 20px;
+        }
+        .nav a {
+            text-decoration: none;
+            color: #888;
+            font-weight: 600;
+            padding: 4px 0;
+            border-bottom: 2px solid transparent;
+        }
+        .nav a.active {
+            color: #b31b1b;
+            border-bottom-color: #b31b1b;
+        }
+        .nav a:hover { color: #b31b1b; }
 
         /* Tabs */
         .tabs {
@@ -137,26 +157,6 @@
             margin-top: 15px;
         }
 
-        /* Nav */
-        .nav {
-            display: flex;
-            justify-content: center;
-            gap: 24px;
-            margin-bottom: 20px;
-        }
-        .nav a {
-            text-decoration: none;
-            color: #888;
-            font-weight: 600;
-            padding: 4px 0;
-            border-bottom: 2px solid transparent;
-        }
-        .nav a.active {
-            color: #b31b1b;
-            border-bottom-color: #b31b1b;
-        }
-        .nav a:hover { color: #b31b1b; }
-
         /* Admin */
         .admin-bar {
             text-align: right;
@@ -226,12 +226,12 @@
 </head>
 <body>
     <div class="nav">
-        <a href="/" class="active">HW3</a>
-        <a href="/hw4">HW4</a>
+        <a href="/">HW3</a>
+        <a href="/hw4" class="active">HW4</a>
     </div>
-    <h1>CS5220 HW3 Leaderboard</h1>
-    <p class="subtitle">MPI Particle Simulation</p>
-    <p class="formula">Parallel Performance = PE1 &times; 0.5 + PE2 &times; 0.5</p>
+    <h1>CS5220 HW4 Leaderboard</h1>
+    <p class="subtitle">Distributed Matrix Multiplication on WSE-2</p>
+    <p class="formula">Runtime = TSC Max cycles (lower is better)</p>
 
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('table')">Leaderboard</button>
@@ -255,15 +255,14 @@
                 <tr>
                     <th class="rank">#</th>
                     <th class="name">Name</th>
-                    <th>RS1e5 (s)</th>
-                    <th>PE1</th>
-                    <th>PE2</th>
-                    <th>Par. Perf.</th>
+                    <th>TSC Min</th>
+                    <th>TSC Mean</th>
+                    <th>Runtime</th>
                     <th class="actions" id="th-actions" style="display:none;"></th>
                 </tr>
             </thead>
             <tbody id="leaderboard-body">
-                <tr><td colspan="6" class="no-data">Loading...</td></tr>
+                <tr><td colspan="5" class="no-data">Loading...</td></tr>
             </tbody>
         </table>
     </div>
@@ -319,7 +318,7 @@
             if (!adminKey) return;
             if (!confirm(`Delete "${name}" from the leaderboard?`)) return;
             try {
-                const resp = await fetch(`/api/admin/delete/${encodeURIComponent(name)}`, {
+                const resp = await fetch(`/api/hw4/admin/delete/${encodeURIComponent(name)}`, {
                     method: 'POST',
                     headers: { 'X-Admin-Key': adminKey }
                 });
@@ -338,7 +337,7 @@
             if (!adminKey) return;
             if (!confirm('Clear ALL submissions from the leaderboard?')) return;
             try {
-                const resp = await fetch('/api/admin/clear', {
+                const resp = await fetch('/api/hw4/admin/clear', {
                     method: 'POST',
                     headers: { 'X-Admin-Key': adminKey }
                 });
@@ -356,6 +355,11 @@
         function fmt(val, decimals) {
             if (val === undefined || val === null) return "--";
             return Number(val).toFixed(decimals);
+        }
+
+        function fmtInt(val) {
+            if (val === undefined || val === null) return "--";
+            return Number(val).toLocaleString();
         }
 
         function rowClass(rank) {
@@ -386,7 +390,7 @@
 
         function renderTable() {
             const tbody = document.getElementById("leaderboard-body");
-            const colSpan = adminKey ? 7 : 6;
+            const colSpan = adminKey ? 6 : 5;
             if (leaderboardData.length === 0) {
                 tbody.innerHTML = `<tr><td colspan="${colSpan}" class="no-data">No submissions yet</td></tr>`;
                 return;
@@ -401,10 +405,9 @@
                 <tr class="${rowClass(rank)}">
                     <td class="rank">${rank}</td>
                     <td class="name">${entry.name}</td>
-                    <td>${fmt(m.RS1e5, 4)}</td>
-                    <td>${fmt(m.PE1, 4)}</td>
-                    <td>${fmt(m.PE2, 4)}</td>
-                    <td class="overall">${fmt(m.parallel_performance, 4)}</td>
+                    <td>${fmtInt(m.tsc_min)}</td>
+                    <td>${fmtInt(m.tsc_mean)}</td>
+                    <td class="overall">${fmtInt(m.runtime)}</td>
                     ${deleteCell}
                 </tr>`;
             }).join("");
@@ -412,10 +415,9 @@
 
         function renderStats() {
             const metrics = [
-                { key: "RS1e5", label: "RS1e5 (s)", color: "#e74c3c", decimals: 4 },
-                { key: "PE1",   label: "PE1 (64\u2192128)", color: "#3498db", decimals: 4 },
-                { key: "PE2",   label: "PE2 (128\u2192256)", color: "#2ecc71", decimals: 4 },
-                { key: "parallel_performance", label: "Parallel Performance", color: "#b31b1b", decimals: 4 }
+                { key: "tsc_min",  label: "TSC Min (cycles)",  color: "#3498db", decimals: 0 },
+                { key: "tsc_mean", label: "TSC Mean (cycles)", color: "#2ecc71", decimals: 1 },
+                { key: "runtime",  label: "Runtime (cycles)",  color: "#b31b1b", decimals: 0 }
             ];
 
             const cardsEl = document.getElementById("stats-cards");
@@ -480,7 +482,7 @@
 
         async function fetchLeaderboard() {
             try {
-                const resp = await fetch("/api/leaderboard");
+                const resp = await fetch("/api/hw4/leaderboard");
                 leaderboardData = await resp.json();
                 renderTable();
                 if (document.getElementById('tab-stats').classList.contains('active')) {
