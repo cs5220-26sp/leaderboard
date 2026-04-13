@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CS5220 HW4 Leaderboard</title>
+    <title>CS5220 HW5 Leaderboard</title>
     <script src="https://cdn.plot.ly/plotly-2.35.0.min.js"></script>
     <style>
         * { box-sizing: border-box; }
@@ -103,7 +103,7 @@
         }
         th.name, td.name { text-align: left; }
         th.rank, td.rank { text-align: center; width: 50px; }
-        th.actions, td.actions { text-align: center; width: 60px; }
+
         tr:hover { background: #f9f9f9; }
         .name { font-family: monospace; font-weight: 600; }
         .overall { font-weight: 700; }
@@ -157,81 +157,17 @@
             margin-top: 15px;
         }
 
-        /* Admin */
-        .admin-bar {
-            text-align: right;
-            margin-bottom: 12px;
-        }
-        .admin-toggle {
-            background: none;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            padding: 5px 12px;
-            font-size: 0.85em;
-            color: #888;
-            cursor: pointer;
-        }
-        .admin-toggle:hover { border-color: #999; color: #555; }
-        .admin-toggle.active { border-color: #b31b1b; color: #b31b1b; }
-        .admin-login {
-            display: none;
-            margin-bottom: 12px;
-            text-align: right;
-        }
-        .admin-login input {
-            padding: 5px 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 0.85em;
-            width: 200px;
-        }
-        .admin-login button {
-            padding: 5px 12px;
-            border: 1px solid #b31b1b;
-            background: #b31b1b;
-            color: white;
-            border-radius: 4px;
-            font-size: 0.85em;
-            cursor: pointer;
-            margin-left: 6px;
-        }
-        .admin-login button:hover { background: #911616; }
-        .admin-actions {
-            display: flex;
-            gap: 8px;
-            justify-content: right;
-            margin-bottom: 12px;
-        }
-        .btn-clear {
-            padding: 5px 12px;
-            border: 1px solid #c0392b;
-            background: white;
-            color: #c0392b;
-            border-radius: 4px;
-            font-size: 0.85em;
-            cursor: pointer;
-        }
-        .btn-clear:hover { background: #c0392b; color: white; }
-        .btn-delete {
-            background: none;
-            border: none;
-            color: #c0392b;
-            cursor: pointer;
-            font-size: 1.1em;
-            padding: 0 4px;
-            opacity: 0.7;
-        }
-        .btn-delete:hover { opacity: 1; }
     </style>
 </head>
 <body>
     <div class="nav">
         <a href="/">HW3</a>
-        <a href="/hw4" class="active">HW4</a>
-        <a href="/hw5">HW5</a>
+        <a href="/hw4">HW4</a>
+        <a href="/hw5" class="active">HW5</a>
     </div>
-    <h1>CS5220 HW4 Leaderboard</h1>
-    <p class="subtitle">Distributed Matrix Multiplication on WSE-2</p>
+    <h1>CS5220 HW5 Leaderboard</h1>
+    <p class="subtitle">CUDA Sparse-Dense Matrix Multiply (SpMM)</p>
+    <p class="formula">avg GFLOPS/s across nlpkkt120, delaunay_n24, Cube_Coup_dt0 (each averaged over k=64 &amp; k=256)</p>
 
     <div class="tabs">
         <button class="tab-btn active" onclick="switchTab('table')">Leaderboard</button>
@@ -240,27 +176,19 @@
 
     <!-- Table Tab -->
     <div id="tab-table" class="tab-panel active">
-        <div class="admin-bar">
-            <button class="admin-toggle" onclick="toggleAdmin()">Admin</button>
-        </div>
-        <div class="admin-login" id="admin-login">
-            <input type="password" id="admin-key" placeholder="Admin key">
-            <button onclick="loginAdmin()">Login</button>
-        </div>
-        <div class="admin-actions" id="admin-actions" style="display:none;">
-            <button class="btn-clear" onclick="clearAll()">Clear All</button>
-        </div>
         <table>
             <thead>
                 <tr>
                     <th class="rank">#</th>
                     <th class="name">Name</th>
-                    <th>Runtime (cycles)</th>
-                    <th class="actions" id="th-actions" style="display:none;"></th>
+                    <th>nlpkkt120</th>
+                    <th>delaunay_n24</th>
+                    <th>Cube_Coup_dt0</th>
+                    <th>Avg GFLOPS/s</th>
                 </tr>
             </thead>
             <tbody id="leaderboard-body">
-                <tr><td colspan="3" class="no-data">Loading...</td></tr>
+                <tr><td colspan="6" class="no-data">Loading...</td></tr>
             </tbody>
         </table>
     </div>
@@ -275,7 +203,6 @@
 
     <script>
         let leaderboardData = [];
-        let adminKey = null;
 
         function switchTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -285,79 +212,9 @@
             if (tab === 'stats') renderStats();
         }
 
-        function toggleAdmin() {
-            const loginEl = document.getElementById('admin-login');
-            const btn = document.querySelector('.admin-toggle');
-            if (adminKey) {
-                adminKey = null;
-                btn.classList.remove('active');
-                loginEl.style.display = 'none';
-                document.getElementById('admin-actions').style.display = 'none';
-                document.getElementById('th-actions').style.display = 'none';
-                renderTable();
-                return;
-            }
-            const visible = loginEl.style.display === 'flex';
-            loginEl.style.display = visible ? 'none' : 'flex';
-        }
-
-        function loginAdmin() {
-            const key = document.getElementById('admin-key').value.trim();
-            if (!key) return;
-            adminKey = key;
-            document.getElementById('admin-login').style.display = 'none';
-            document.getElementById('admin-actions').style.display = 'flex';
-            document.getElementById('th-actions').style.display = '';
-            document.querySelector('.admin-toggle').classList.add('active');
-            renderTable();
-        }
-
-        async function deleteEntry(name) {
-            if (!adminKey) return;
-            if (!confirm(`Delete "${name}" from the leaderboard?`)) return;
-            try {
-                const resp = await fetch(`/api/hw4/admin/delete/${encodeURIComponent(name)}`, {
-                    method: 'POST',
-                    headers: { 'X-Admin-Key': adminKey }
-                });
-                const data = await resp.json();
-                if (!resp.ok) {
-                    alert(data.error || 'Delete failed');
-                    return;
-                }
-                fetchLeaderboard();
-            } catch (err) {
-                alert('Delete failed: ' + err.message);
-            }
-        }
-
-        async function clearAll() {
-            if (!adminKey) return;
-            if (!confirm('Clear ALL submissions from the leaderboard?')) return;
-            try {
-                const resp = await fetch('/api/hw4/admin/clear', {
-                    method: 'POST',
-                    headers: { 'X-Admin-Key': adminKey }
-                });
-                const data = await resp.json();
-                if (!resp.ok) {
-                    alert(data.error || 'Clear failed');
-                    return;
-                }
-                fetchLeaderboard();
-            } catch (err) {
-                alert('Clear failed: ' + err.message);
-            }
-        }
-
         function fmt(val, decimals) {
             if (val === undefined || val === null) return "--";
             return Number(val).toFixed(decimals);
-        }
-
-        function fmtInt(val) {
-            if (val === undefined || val === null) return "--";
-            return Number(val).toLocaleString();
         }
 
         function rowClass(rank) {
@@ -388,30 +245,31 @@
 
         function renderTable() {
             const tbody = document.getElementById("leaderboard-body");
-            const colSpan = adminKey ? 4 : 3;
             if (leaderboardData.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="${colSpan}" class="no-data">No submissions yet</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="no-data">No submissions yet</td></tr>`;
                 return;
             }
             tbody.innerHTML = leaderboardData.map((entry, i) => {
                 const m = entry.metrics;
                 const rank = i + 1;
-                const deleteCell = adminKey
-                    ? `<td class="actions"><button class="btn-delete" onclick="deleteEntry('${entry.name}')" title="Delete">&#x2715;</button></td>`
-                    : '';
                 return `
                 <tr class="${rowClass(rank)}">
                     <td class="rank">${rank}</td>
                     <td class="name">${entry.name}</td>
-                    <td class="overall">${fmtInt(m.runtime)}</td>
-                    ${deleteCell}
+                    <td>${fmt(m.nlpkkt120, 1)}</td>
+                    <td>${fmt(m.delaunay_n24, 1)}</td>
+                    <td>${fmt(m.Cube_Coup_dt0, 1)}</td>
+                    <td class="overall">${fmt(m.avg_gflops, 1)}</td>
                 </tr>`;
             }).join("");
         }
 
         function renderStats() {
             const metrics = [
-                { key: "runtime",  label: "Runtime (cycles)",  color: "#b31b1b", decimals: 0 }
+                { key: "nlpkkt120",     label: "nlpkkt120 (GFLOPS/s)",     color: "#b31b1b", decimals: 1 },
+                { key: "delaunay_n24",  label: "delaunay_n24 (GFLOPS/s)",  color: "#2c7bb6", decimals: 1 },
+                { key: "Cube_Coup_dt0", label: "Cube_Coup_dt0 (GFLOPS/s)", color: "#d7191c", decimals: 1 },
+                { key: "avg_gflops",    label: "Avg GFLOPS/s",             color: "#1a9641", decimals: 1 }
             ];
 
             const cardsEl = document.getElementById("stats-cards");
@@ -476,7 +334,7 @@
 
         async function fetchLeaderboard() {
             try {
-                const resp = await fetch("/api/hw4/leaderboard");
+                const resp = await fetch("/api/hw5/leaderboard");
                 leaderboardData = await resp.json();
                 renderTable();
                 if (document.getElementById('tab-stats').classList.contains('active')) {

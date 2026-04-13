@@ -13,6 +13,8 @@ HW3_HEADER = "===== CS5220 HW3 LEADERBOARD SUBMISSION ====="
 HW3_FOOTER = "===== END CS5220 HW3 LEADERBOARD SUBMISSION ====="
 HW4_HEADER = "===== CS5220 HW4 LEADERBOARD SUBMISSION ====="
 HW4_FOOTER = "===== END CS5220 HW4 LEADERBOARD SUBMISSION ====="
+HW5_HEADER = "===== CS5220 HW5 LEADERBOARD SUBMISSION ====="
+HW5_FOOTER = "===== END CS5220 HW5 LEADERBOARD SUBMISSION ====="
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "changeme")
 
 
@@ -42,6 +44,14 @@ def init_db():
     """)
     db.execute("""
         CREATE TABLE IF NOT EXISTS hw4_submissions (
+            name TEXT PRIMARY KEY,
+            timestamp TEXT NOT NULL,
+            raw_output TEXT NOT NULL,
+            metrics TEXT NOT NULL DEFAULT '{}'
+        )
+    """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS hw5_submissions (
             name TEXT PRIMARY KEY,
             timestamp TEXT NOT NULL,
             raw_output TEXT NOT NULL,
@@ -134,6 +144,45 @@ def parse_hw4_output(raw_output):
             metrics["runtime"] = metrics["tsc_max"]
         if mean_match:
             metrics["tsc_mean"] = float(mean_match.group(1))
+
+    return metrics
+
+
+HW5_MATRICES = ["nlpkkt120", "delaunay_n24", "Cube_Coup_dt0"]
+
+
+def strip_ansi(text):
+    return re.sub(r'\x1b\[[0-9;]*m', '', text)
+
+
+def parse_hw5_output(raw_output):
+    """Parse raw job-leaderboard output for HW5 into structured metrics.
+
+    Extracts student GFLOPS/s for each matrix (averaged over k values),
+    plus the overall average across all matrices.
+    """
+    clean = strip_ansi(raw_output)
+    metrics = {}
+
+    pattern = (
+        r'Running SpMM \(matrices/([^/]+)/[^,]+, k = (\d+)\)'
+        r'.*?\[SpMM_student\]:\s+(\d+)\s+gflops/s'
+    )
+    runs = re.findall(pattern, clean, re.DOTALL)
+
+    matrix_gflops = {}
+    for matrix_name, k, gflops_val in runs:
+        matrix_gflops.setdefault(matrix_name, []).append(int(gflops_val))
+
+    all_avgs = []
+    for mat in HW5_MATRICES:
+        if mat in matrix_gflops:
+            avg = sum(matrix_gflops[mat]) / len(matrix_gflops[mat])
+            metrics[mat] = round(avg, 2)
+            all_avgs.append(avg)
+
+    if all_avgs:
+        metrics["avg_gflops"] = round(sum(all_avgs) / len(all_avgs), 2)
 
     return metrics
 
@@ -289,6 +338,80 @@ def hw4_delete_entry(name):
         return jsonify({"error": "Unauthorized"}), 401
     db = get_db()
     db.execute("DELETE FROM hw4_submissions WHERE name = ?", (name,))
+    db.commit()
+    return jsonify({"status": "ok", "message": f"Deleted {name}"})
+
+
+@app.route("/hw5")
+def hw5_index():
+    return render_template("leaderboard_hw5.html")
+
+
+@app.route("/api/hw5/submit", methods=["POST"])
+def hw5_submit():
+    raw_output = request.get_data(as_text=True)
+
+    valid, result = validate_output(raw_output, HW5_HEADER, HW5_FOOTER)
+    if not valid:
+        return jsonify({"error": result}), 400
+
+    name = result
+    timestamp_match = re.search(r"TIMESTAMP:\s*(\S+)", raw_output)
+    timestamp = timestamp_match.group(1) if timestamp_match else datetime.now(timezone.utc).isoformat()
+
+    metrics = parse_hw5_output(raw_output)
+
+    db = get_db()
+    db.execute(
+        """INSERT INTO hw5_submissions (name, timestamp, raw_output, metrics)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(name) DO UPDATE SET
+               timestamp = excluded.timestamp,
+               raw_output = excluded.raw_output,
+               metrics = excluded.metrics""",
+        (name, timestamp, raw_output, json.dumps(metrics)),
+    )
+    db.commit()
+
+    return jsonify({"status": "ok", "name": name, "timestamp": timestamp})
+
+
+@app.route("/api/hw5/leaderboard")
+def hw5_leaderboard_data():
+    db = get_db()
+    rows = db.execute(
+        "SELECT name, timestamp, metrics FROM hw5_submissions ORDER BY timestamp DESC"
+    ).fetchall()
+
+    entries = []
+    for row in rows:
+        entry = {
+            "name": row["name"],
+            "timestamp": row["timestamp"],
+            "metrics": json.loads(row["metrics"]),
+        }
+        entries.append(entry)
+
+    entries.sort(key=lambda e: e["metrics"].get("avg_gflops", 0), reverse=True)
+    return jsonify(entries)
+
+
+@app.route("/api/hw5/admin/clear", methods=["POST"])
+def hw5_clear_all():
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    db.execute("DELETE FROM hw5_submissions")
+    db.commit()
+    return jsonify({"status": "ok", "message": "All HW5 submissions cleared"})
+
+
+@app.route("/api/hw5/admin/delete/<name>", methods=["POST"])
+def hw5_delete_entry(name):
+    if not require_admin():
+        return jsonify({"error": "Unauthorized"}), 401
+    db = get_db()
+    db.execute("DELETE FROM hw5_submissions WHERE name = ?", (name,))
     db.commit()
     return jsonify({"status": "ok", "message": f"Deleted {name}"})
 
